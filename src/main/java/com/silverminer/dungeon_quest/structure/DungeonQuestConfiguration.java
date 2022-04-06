@@ -24,19 +24,38 @@
 package com.silverminer.dungeon_quest.structure;
 
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.DataResult;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.core.Holder;
+import net.minecraft.core.Registry;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.levelgen.feature.StructureFeature;
 import net.minecraft.world.level.levelgen.feature.configurations.FeatureConfiguration;
 import net.minecraft.world.level.levelgen.feature.configurations.JigsawConfiguration;
-import net.minecraft.world.level.levelgen.structure.StructureSet;
+import net.minecraft.world.level.levelgen.feature.structures.StructureTemplatePool;
+import net.minecraftforge.registries.ForgeRegistries;
 
-public record DungeonQuestConfiguration(JigsawConfiguration jigsawConfiguration,
-                                        Holder<StructureSet> structureSetHolder,
+import java.util.Optional;
+
+public record DungeonQuestConfiguration(ResourceLocation startPool, int maxDepth,
+                                        StructureFeature<?> structureFeature,
                                         int distance) implements FeatureConfiguration {
+   private static final Codec<StructureFeature<?>> STRUCTURE_FEATURE_CODEC = ResourceLocation.CODEC.flatXmap(
+         resourceLocation ->
+               Optional.ofNullable(ForgeRegistries.STRUCTURE_FEATURES.getValue(resourceLocation))
+                     .map(DataResult::success).orElse(DataResult.error(resourceLocation + " is no valid StructureFeature")),
+         spawnCriteria -> Optional.ofNullable(ForgeRegistries.STRUCTURE_FEATURES.getKey(spawnCriteria))
+               .map(DataResult::success).orElse(DataResult.error("This StructureFeature isn't registered")));
    public static final Codec<DungeonQuestConfiguration> CODEC = RecordCodecBuilder.create(dungeonQuestConfigurationInstance ->
          dungeonQuestConfigurationInstance.group(
-                     JigsawConfiguration.CODEC.fieldOf("jigsaw_config").forGetter(DungeonQuestConfiguration::jigsawConfiguration),
-                     StructureSet.CODEC.fieldOf("structure").forGetter(DungeonQuestConfiguration::structureSetHolder),
+                     ResourceLocation.CODEC.fieldOf("start_pool").forGetter(DungeonQuestConfiguration::startPool),
+                     Codec.intRange(1, 7).fieldOf("size").forGetter(DungeonQuestConfiguration::maxDepth),
+                     STRUCTURE_FEATURE_CODEC.fieldOf("structure").forGetter(DungeonQuestConfiguration::structureFeature),
                      Codec.intRange(1, 32).fieldOf("max_distance").forGetter(DungeonQuestConfiguration::distance))
                .apply(dungeonQuestConfigurationInstance, DungeonQuestConfiguration::new));
+
+   public JigsawConfiguration jigsawConfiguration(RegistryAccess registryAccess) {
+      Registry<StructureTemplatePool> structureTemplatePoolRegistry = registryAccess.registryOrThrow(Registry.TEMPLATE_POOL_REGISTRY);
+      return new JigsawConfiguration(() -> structureTemplatePoolRegistry.get(this.startPool()), this.maxDepth());
+   }
 }

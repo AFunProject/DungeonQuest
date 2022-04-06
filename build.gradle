@@ -7,14 +7,18 @@ buildscript {
     dependencies {
         classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '5.1.+', changing: true
         classpath "gradle.plugin.org.cadixdev.gradle:licenser:0.6.+"
+        classpath "com.modrinth.minotaur:Minotaur:2.1.1"
+        classpath 'org.spongepowered:mixingradle:0.7.+'
     }
 }
 
 apply plugin: 'net.minecraftforge.gradle'
 apply plugin: 'org.cadixdev.licenser'
+apply plugin: "com.modrinth.minotaur"
+apply plugin: 'org.spongepowered.mixin'
 
 group = 'com.silverminer'
-version = '1.0-SNAPSHOT'
+version = '1.0.0-alpha1'
 
 java {
     archivesBaseName = 'dungeon_quest'
@@ -30,7 +34,8 @@ license {
 }
 
 minecraft {
-    mappings channel: 'official', version: '1.18.2'
+    mappings channel: 'official', version: '1.18.1'
+    accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
     runs {
         client {
             workingDirectory project.file('run')
@@ -72,7 +77,15 @@ minecraft {
 }
 
 dependencies {
-    minecraft 'net.minecraftforge:forge:1.18.2-40.0.19'
+    minecraft 'net.minecraftforge:forge:1.18.1-39.1.0'
+}
+
+mixin {
+    add sourceSets.main, 'mixins.dungeon_quest.refmap.json'
+    config 'mixins.dungeon_quest.json'
+    debug.verbose = true
+    debug.export = true
+    dumpTargetOnFailure = true
 }
 
 jar {
@@ -88,3 +101,11 @@ jar {
 }
 
 jar.finalizedBy('reobfJar')
+
+modrinth {
+    token = System.getenv("MODRINTH_TOKEN") // This is the default. Remember to have the MODRINTH_TOKEN environment variable set or else this will fail, or set it to whatever you want - just make sure it stays private!
+    projectId = "6L6MQSXJ"
+    versionType = "alpha" // This is the default
+    uploadFile = jar // With Fabric Loom or Architectury Loom, this MUST be set to `remapJar` instead of `jar`!
+    gameVersions = ["1.18.1"] // Must be an array, even with only one version
+}

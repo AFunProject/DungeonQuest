@@ -24,18 +24,17 @@
 package com.silverminer.dungeon_quest.structure;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.GenerationStep;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.feature.StructureFeature;
 import net.minecraft.world.level.levelgen.feature.configurations.JigsawConfiguration;
+import net.minecraft.world.level.levelgen.feature.configurations.StructureFeatureConfiguration;
+import net.minecraft.world.level.levelgen.feature.structures.JigsawPlacement;
 import net.minecraft.world.level.levelgen.structure.PoolElementStructurePiece;
-import net.minecraft.world.level.levelgen.structure.StructureSet;
 import net.minecraft.world.level.levelgen.structure.pieces.PieceGenerator;
 import net.minecraft.world.level.levelgen.structure.pieces.PieceGeneratorSupplier;
-import net.minecraft.world.level.levelgen.structure.placement.StructurePlacement;
-import net.minecraft.world.level.levelgen.structure.pools.JigsawPlacement;
-import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Optional;
@@ -47,49 +46,63 @@ public class DungeonQuestStructureFeature extends StructureFeature<DungeonQuestC
    }
 
    private static @NotNull Optional<PieceGenerator<DungeonQuestConfiguration>> place(PieceGeneratorSupplier.Context<DungeonQuestConfiguration> context) {
-      if(!checkLocation(context)) {
+      if (!checkLocation(context)) {
          return Optional.empty();
       } else {
          BlockPos position = context.chunkPos().getMiddleBlockPosition(0);
-         position = new BlockPos(position.getX(),
-               context.chunkGenerator().getFirstFreeHeight(position.getX(), position.getZ(), Heightmap.Types.WORLD_SURFACE_WG, context.heightAccessor()),
-               position.getZ());
+         int minBuildHeight = context.heightAccessor().getMinBuildHeight();
+         int yPos = (context.chunkGenerator().getFirstFreeHeight(position.getX(), position.getZ(),
+               Heightmap.Types.WORLD_SURFACE_WG, context.heightAccessor()) / 2)
+               + minBuildHeight;
+         position = new BlockPos(position.getX(), Math.max(yPos, minBuildHeight + 30), position.getZ());
+         JigsawConfiguration jigsawConfiguration = context.config().jigsawConfiguration(context.registryAccess());
          Optional<PieceGenerator<JigsawConfiguration>> pieceGenerator = JigsawPlacement.addPieces(
                new PieceGeneratorSupplier.Context<>(context.chunkGenerator(), context.biomeSource(), context.seed(),
-                     context.chunkPos(), context.config().jigsawConfiguration(), context.heightAccessor(),
+                     context.chunkPos(), jigsawConfiguration, context.heightAccessor(),
                      context.validBiome(), context.structureManager(), context.registryAccess()),
                PoolElementStructurePiece::new, position,
-               false, true);
+               false, false);
          return pieceGenerator.isEmpty() ? Optional.empty() :
                Optional.of((structurePieceBuilder, pieceGeneratorContext) ->
-                     pieceGenerator.get().generatePieces(structurePieceBuilder, convertContext(pieceGeneratorContext)));
+                     pieceGenerator.get().generatePieces(structurePieceBuilder, convertContext(pieceGeneratorContext, jigsawConfiguration)));
       }
    }
 
    private static boolean checkLocation(@NotNull PieceGeneratorSupplier.Context<DungeonQuestConfiguration> context) {
-      return hasFeatureChunkInRange(context.config().structureSetHolder().value(), context.seed(), context.chunkPos().x, context.chunkPos().z, context.config().distance(), context.chunkGenerator());
+      return hasFeatureChunkInRange(context.config().structureFeature(), context.seed(), context.chunkPos().x, context.chunkPos().z, context.config().distance(), context.chunkGenerator(), context);
    }
 
-   private static boolean hasFeatureChunkInRange(StructureSet structureSet, long seed, int chunkX, int chunkZ, int range, ChunkGenerator chunkGenerator) {
-      if (structureSet != null) {
-         StructurePlacement structureplacement = structureSet.placement();
+   private static boolean hasFeatureChunkInRange(StructureFeature<?> structure, long seed, int chunkX, int chunkZ, int range, ChunkGenerator chunkGenerator, @NotNull PieceGeneratorSupplier.Context<DungeonQuestConfiguration> context) {
+      if (structure != null) {
+         StructureFeatureConfiguration structureFeatureConfiguration = chunkGenerator.getSettings().getConfig(structure);
+         if(structureFeatureConfiguration == null) {
+            return false;
+         }
 
          for (int i = chunkX - range; i <= chunkX + range; ++i) {
             for (int j = chunkZ - range; j <= chunkZ + range; ++j) {
-               if (structureplacement.isFeatureChunk(chunkGenerator, range, i, j)) {
+               ChunkPos structurePos = structure.getPotentialFeatureChunk(structureFeatureConfiguration, seed, i, j);
+
+               if (i == structurePos.x && j == structurePos.z) {
                   return true;
                }
             }
          }
 
+         // Either the above method, which has the issue that there might be only a possible, but no actual placement
+         // Or the above method, where we're missing a Server Level and might (which is most likely) cause a server crash due to circle references
+         // ServerLevel serverLevel = ?
+         // BlockPos startPos = context.chunkPos().getMiddleBlockPosition(0);
+         // BlockPos structurePos = context.chunkGenerator().findNearestMapFeature(serverLevel, structure, startPos, range, false);
+         // return structurePos != null && structurePos.closerThan(startPos, range);
+
       }
       return false;
    }
 
-   @Contract("_ -> new")
-   private static PieceGenerator.@NotNull Context<JigsawConfiguration> convertContext(PieceGenerator.@NotNull Context<DungeonQuestConfiguration> context) {
+   private static PieceGenerator.@NotNull Context<JigsawConfiguration> convertContext(PieceGenerator.@NotNull Context<DungeonQuestConfiguration> context, JigsawConfiguration jigsawConfiguration) {
       return new PieceGenerator.Context<>(
-            context.config().jigsawConfiguration(),
+            jigsawConfiguration,
             context.chunkGenerator(),
             context.structureManager(),
             context.chunkPos(),

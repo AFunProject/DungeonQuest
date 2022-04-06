@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "package": "com.silverminer.dungeon_quest.mixins",
+  "refmap": "mixins.dungeon_quest.refmap.json",
+  "compatibilityLevel": "JAVA_8",
+  "mixins": [
+    "MixinStructureFeatures"
+  ],
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "minVersion": "0.8"
+}
